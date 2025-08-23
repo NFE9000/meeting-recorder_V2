@@ -1,95 +1,623 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="de">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta http-equiv="Content-Style-Type" content="text/css">
-  <title></title>
-  <meta name="Generator" content="Cocoa HTML Writer">
-  <meta name="CocoaVersion" content="2575.6">
-  <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #8f9096; -webkit-text-stroke: #8f9096; background-color: #ffffff}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #2a2c33; -webkit-text-stroke: #2a2c33; background-color: #ffffff; min-height: 16.0px}
-    p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #930093; -webkit-text-stroke: #930093; background-color: #ffffff}
-    p.p4 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #42933e; -webkit-text-stroke: #42933e; background-color: #ffffff}
-    p.p5 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #2a2c33; -webkit-text-stroke: #2a2c33; background-color: #ffffff}
-    span.s1 {font-kerning: none}
-    span.s2 {font-kerning: none; color: #2a2c33; -webkit-text-stroke: 0px #2a2c33}
-    span.s3 {font-kerning: none; color: #325eee; -webkit-text-stroke: 0px #325eee}
-    span.s4 {font-kerning: none; color: #930093; -webkit-text-stroke: 0px #930093}
-    span.s5 {font-kerning: none; color: #42933e; -webkit-text-stroke: 0px #42933e}
-    span.s6 {font-kerning: none; color: #a75705; -webkit-text-stroke: 0px #a75705}
-    span.s7 {font-kerning: none; color: #db3f39; -webkit-text-stroke: 0px #db3f39}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Recorder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: #1d1d1f;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 48px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 0px rgba(255, 255, 255, 0.5) inset;
+            max-width: 480px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: 17px;
+            color: #86868b;
+            font-weight: 400;
+            line-height: 1.4;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            color: #1d1d1f;
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+
+        input {
+            width: 100%;
+            padding: 16px 20px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            transition: all 0.2s ease;
+            font-family: inherit;
+            color: #1d1d1f;
+            backdrop-filter: blur(10px);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .record-section {
+            text-align: center;
+            margin: 48px 0;
+        }
+
+        .record-btn {
+            background: linear-gradient(135deg, #007aff 0%, #005ec4 100%);
+            color: white;
+            border: none;
+            padding: 18px 36px;
+            border-radius: 50px;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3), 0 1px 0px rgba(255, 255, 255, 0.2) inset;
+            letter-spacing: -0.01em;
+            min-width: 200px;
+        }
+
+        .record-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4), 0 1px 0px rgba(255, 255, 255, 0.2) inset;
+        }
+
+        .record-btn.recording {
+            background: linear-gradient(135deg, #ff3b30 0%, #d70015 100%);
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        .record-btn.processing {
+            background: linear-gradient(135deg, #34c759 0%, #248a3d 100%);
+            cursor: not-allowed;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1) translateY(-2px); }
+            50% { transform: scale(1.02) translateY(-2px); }
+        }
+
+        .timer {
+            font-size: 28px;
+            font-weight: 300;
+            margin: 20px 0;
+            color: #1d1d1f;
+            font-feature-settings: 'tnum';
+            letter-spacing: 0.02em;
+        }
+
+        .status {
+            margin: 24px 0;
+            padding: 16px 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 500;
+            font-size: 15px;
+            border: 1px solid transparent;
+        }
+
+        .status.ready {
+            background: rgba(52, 199, 89, 0.1);
+            color: #1e4620;
+            border-color: rgba(52, 199, 89, 0.2);
+        }
+
+        .status.recording {
+            background: rgba(255, 59, 48, 0.1);
+            color: #611a15;
+            border-color: rgba(255, 59, 48, 0.2);
+        }
+
+        .status.processing {
+            background: rgba(0, 122, 255, 0.1);
+            color: #1e3a8a;
+            border-color: rgba(0, 122, 255, 0.2);
+        }
+
+        .status.completed {
+            background: rgba(52, 199, 89, 0.1);
+            color: #1e4620;
+            border-color: rgba(52, 199, 89, 0.2);
+        }
+
+        .status.error {
+            background: rgba(255, 59, 48, 0.1);
+            color: #611a15;
+            border-color: rgba(255, 59, 48, 0.2);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.08);
+            border-radius: 2px;
+            margin: 16px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007aff, #5ac8fa);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .project-card {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            font-weight: 500;
+            color: #1d1d1f;
+            backdrop-filter: blur(10px);
+        }
+
+        .project-card:hover {
+            background: rgba(0, 122, 255, 0.05);
+            border-color: #007aff;
+            transform: translateY(-1px);
+        }
+
+        .project-card.selected {
+            background: #007aff;
+            color: white;
+            border-color: #005ec4;
+        }
+
+        .debug-panel {
+            background: rgba(248, 248, 248, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            margin-top: 24px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .debug-toggle {
+            background: rgba(0, 0, 0, 0.05);
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            color: #86868b;
+            margin-bottom: 16px;
+        }
+
+        .debug-log {
+            padding: 8px 12px;
+            font-size: 12px;
+            font-family: 'Monaco', monospace;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .debug-log.success { color: #34c759; }
+        .debug-log.error { color: #ff3b30; }
+        .debug-log.info { color: #007aff; }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 32px 24px;
+                margin: 20px;
+            }
+            
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-<p class="p1"><span class="s1"><i>// ===== DATEI 2: api/notion.js =====</i><i></i></span></p>
-<p class="p1"><span class="s1"><i>// (Speichere das als api/notion.js - das ist die Edge Function)</i><i></i></span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p3"><span class="s1">export</span><span class="s2"> </span><span class="s1">default</span><span class="s2"> </span><span class="s1">async</span><span class="s2"> </span><span class="s1">function</span><span class="s2"> </span><span class="s3">handler</span><span class="s2">(req, res) {</span></p>
-<p class="p1"><span class="s2"><span class="Apple-converted-space">    </span></span><span class="s1"><i>// CORS Headers für Vercel</i><i></i></span></p>
-<p class="p4"><span class="s2"><span class="Apple-converted-space">    </span>res.</span><span class="s3">setHeader</span><span class="s2">(</span><span class="s1">'Access-Control-Allow-Origin'</span><span class="s2">, </span><span class="s1">'*'</span><span class="s2">);</span></p>
-<p class="p4"><span class="s2"><span class="Apple-converted-space">    </span>res.</span><span class="s3">setHeader</span><span class="s2">(</span><span class="s1">'Access-Control-Allow-Methods'</span><span class="s2">, </span><span class="s1">'POST, OPTIONS'</span><span class="s2">);</span></p>
-<p class="p4"><span class="s2"><span class="Apple-converted-space">    </span>res.</span><span class="s3">setHeader</span><span class="s2">(</span><span class="s1">'Access-Control-Allow-Headers'</span><span class="s2">, </span><span class="s1">'Content-Type'</span><span class="s2">);</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span></span><span class="s4">if</span><span class="s1"> (req.method </span><span class="s3">===</span><span class="s1"> </span><span class="s5">'OPTIONS'</span><span class="s1">) {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">return</span><span class="s1"> res.</span><span class="s3">status</span><span class="s1">(</span><span class="s6">200</span><span class="s1">).</span><span class="s3">end</span><span class="s1">();</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span></span><span class="s4">if</span><span class="s1"> (req.method </span><span class="s3">!==</span><span class="s1"> </span><span class="s5">'POST'</span><span class="s1">) {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">return</span><span class="s1"> res.</span><span class="s3">status</span><span class="s1">(</span><span class="s6">405</span><span class="s1">).</span><span class="s3">json</span><span class="s1">({ </span><span class="s7">error</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'Method not allowed'</span><span class="s1"> });</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span></span><span class="s4">try</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">const</span><span class="s1"> { dbId, apiKey, title, content, status } </span><span class="s3">=</span><span class="s1"> req.body;</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">const</span><span class="s1"> notionData </span><span class="s3">=</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">parent</span><span class="s3">:</span><span class="s1"> { </span><span class="s7">database_id</span><span class="s3">:</span><span class="s1"> dbId },</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">properties</span><span class="s3">:</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">'Name'</span><span class="s3">:</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                    </span></span><span class="s7">title</span><span class="s3">:</span><span class="s1"> [{ </span><span class="s7">text</span><span class="s3">:</span><span class="s1"> { </span><span class="s7">content</span><span class="s3">:</span><span class="s1"> title } }]</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span>},</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">'Status'</span><span class="s3">:</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                    </span></span><span class="s7">select</span><span class="s3">:</span><span class="s1"> { </span><span class="s7">name</span><span class="s3">:</span><span class="s1"> status }</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span>}</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span>},</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">children</span><span class="s3">:</span><span class="s1"> [</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span>{</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                    </span></span><span class="s7">object</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'block'</span><span class="s1">,</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                    </span></span><span class="s7">type</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'paragraph'</span><span class="s1">,</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                    </span></span><span class="s7">paragraph</span><span class="s3">:</span><span class="s1"> { </span><span class="s7">rich_text</span><span class="s3">:</span><span class="s1"> [{ </span><span class="s7">text</span><span class="s3">:</span><span class="s1"> { </span><span class="s7">content</span><span class="s3">:</span><span class="s1"> content } }] }</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span>}</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span>]</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span>};</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p4"><span class="s2"><span class="Apple-converted-space">        </span></span><span class="s4">const</span><span class="s2"> notionResponse </span><span class="s3">=</span><span class="s2"> </span><span class="s4">await</span><span class="s2"> </span><span class="s3">fetch</span><span class="s2">(</span><span class="s1">'https://api.notion.com/v1/pages'</span><span class="s2">, {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">method</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'POST'</span><span class="s1">,</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">headers</span><span class="s3">:</span><span class="s1"> {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">'Authorization'</span><span class="s3">:</span><span class="s1"> </span><span class="s5">`Bearer </span><span class="s1">${apiKey}</span><span class="s5">`</span><span class="s1">,</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">'Content-Type'</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'application/json'</span><span class="s1">,</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">'Notion-Version'</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'2022-06-28'</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span>},</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">body</span><span class="s3">:</span><span class="s1"> </span><span class="s6">JSON</span><span class="s1">.</span><span class="s3">stringify</span><span class="s1">(notionData)</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span>});</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">if</span><span class="s1"> (</span><span class="s3">!</span><span class="s1">notionResponse.ok) {</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s4">const</span><span class="s1"> errorText </span><span class="s3">=</span><span class="s1"> </span><span class="s4">await</span><span class="s1"> notionResponse.</span><span class="s3">text</span><span class="s1">();</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s6">console</span><span class="s1">.</span><span class="s3">error</span><span class="s1">(</span><span class="s5">'Notion API Error:'</span><span class="s1">, errorText);</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s4">return</span><span class="s1"> res.</span><span class="s3">status</span><span class="s1">(notionResponse.status).</span><span class="s3">json</span><span class="s1">({<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">error</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'Notion API Error'</span><span class="s1">,<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">                </span></span><span class="s7">details</span><span class="s3">:</span><span class="s1"> errorText<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span>});</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">const</span><span class="s1"> result </span><span class="s3">=</span><span class="s1"> </span><span class="s4">await</span><span class="s1"> notionResponse.</span><span class="s3">json</span><span class="s1">();</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">return</span><span class="s1"> res.</span><span class="s3">status</span><span class="s1">(</span><span class="s6">200</span><span class="s1">).</span><span class="s3">json</span><span class="s1">({ </span><span class="s7">success</span><span class="s3">:</span><span class="s1"> </span><span class="s6">true</span><span class="s1">, result });</span></p>
-<p class="p2"><span class="s1"></span><br></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span>} </span><span class="s4">catch</span><span class="s1"> (error) {</span></p>
-<p class="p4"><span class="s2"><span class="Apple-converted-space">        </span></span><span class="s6">console</span><span class="s2">.</span><span class="s3">error</span><span class="s2">(</span><span class="s1">'Edge Function Error:'</span><span class="s2">, error);</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s4">return</span><span class="s1"> res.</span><span class="s3">status</span><span class="s1">(</span><span class="s6">500</span><span class="s1">).</span><span class="s3">json</span><span class="s1">({<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">error</span><span class="s3">:</span><span class="s1"> </span><span class="s5">'Server Error'</span><span class="s1">,<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s7">details</span><span class="s3">:</span><span class="s1"> error.message<span class="Apple-converted-space"> </span></span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">        </span>});</span></p>
-<p class="p5"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
-<p class="p5"><span class="s1">}</span></p>
+    <div class="container">
+        <div class="header">
+            <h1>Meeting Recorder</h1>
+            <p>Intelligente Audio-Aufnahme mit KI-Transkription</p>
+        </div>
+
+        <div class="form-group">
+            <label>Projekt auswählen</label>
+            <div class="projects-grid">
+                <div class="project-card" data-project="sonnenfarmen">
+                    ☀️ Sonnenfarmen
+                </div>
+                <div class="project-card" data-project="mikuta">
+                    🏢 MIKUTA
+                </div>
+                <div class="project-card selected" data-project="heidelberger">
+                    🌿 Heidelberger Chlorella
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="meetingTitle">Meeting Titel</label>
+            <input type="text" id="meetingTitle" placeholder="z.B. Quartalsbesprechung Q4">
+        </div>
+
+        <div class="record-section">
+            <button id="recordBtn" class="record-btn">⏺ Aufnahme starten</button>
+            <div id="timer" class="timer">00:00</div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+        </div>
+
+        <div id="status" class="status ready">
+            ✓ Bereit für Aufnahme
+        </div>
+
+        <button class="debug-toggle" onclick="toggleDebug()">🔍 Debug Log</button>
+        <div id="debugPanel" class="debug-panel"></div>
+    </div>
+
+    <script>
+        let debugLogs = [];
+
+        function addDebugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLogs.push({timestamp, message, type});
+            
+            const panel = document.getElementById('debugPanel');
+            const logDiv = document.createElement('div');
+            logDiv.className = `debug-log ${type}`;
+            logDiv.textContent = `${timestamp} - ${message}`;
+            panel.appendChild(logDiv);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        function toggleDebug() {
+            const panel = document.getElementById('debugPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        class MeetingRecorder {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.startTime = null;
+                this.timerInterval = null;
+                this.isRecording = false;
+                this.selectedProject = 'heidelberger';
+                
+                this.recordBtn = document.getElementById('recordBtn');
+                this.timer = document.getElementById('timer');
+                this.status = document.getElementById('status');
+                this.progressFill = document.getElementById('progressFill');
+                
+                this.projects = {
+                    'sonnenfarmen': {
+                        name: 'Sonnenfarmen',
+                        dbId: 'f1e7db9921f24bc890910881557e4572'
+                    },
+                    'mikuta': {
+                        name: 'MIKUTA',
+                        dbId: '206078e0d6d7802f8421df3f640a7fa3'
+                    },
+                    'heidelberger': {
+                        name: 'Heidelberger Chlorella',
+                        dbId: '24f078e0d6d780e68b7cfe9ff914864d'
+                    }
+                };
+                
+                this.initializeEventListeners();
+                addDebugLog('Meeting Recorder initialisiert', 'success');
+            }
+
+            initializeEventListeners() {
+                this.recordBtn.addEventListener('click', () => this.toggleRecording());
+                
+                document.querySelectorAll('.project-card').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        document.querySelectorAll('.project-card').forEach(c => c.classList.remove('selected'));
+                        card.classList.add('selected');
+                        this.selectedProject = card.dataset.project;
+                        addDebugLog(`Projekt gewechselt zu: ${this.projects[this.selectedProject].name}`, 'info');
+                    });
+                });
+            }
+
+            async toggleRecording() {
+                if (!this.isRecording) {
+                    await this.startRecording();
+                } else {
+                    await this.stopRecording();
+                }
+            }
+
+            async startRecording() {
+                try {
+                    addDebugLog('Mikrofon-Zugriff anfordern...', 'info');
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            sampleRate: 44100
+                        }
+                    });
+
+                    const audioTracks = stream.getAudioTracks();
+                    if (audioTracks.length > 0) {
+                        const deviceLabel = audioTracks[0].label || 'Standard-Mikrofon';
+                        addDebugLog(`Mikrofon aktiviert: ${deviceLabel}`, 'success');
+                    }
+
+                    this.mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: 'audio/webm'
+                    });
+
+                    this.audioChunks = [];
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                    };
+
+                    this.mediaRecorder.onstop = () => {
+                        this.processRecording();
+                    };
+
+                    this.mediaRecorder.start();
+                    this.isRecording = true;
+                    this.startTime = Date.now();
+                    
+                    this.updateUI('recording');
+                    this.startTimer();
+                    addDebugLog('Aufnahme gestartet', 'success');
+
+                } catch (error) {
+                    console.error('Fehler beim Starten der Aufnahme:', error);
+                    this.updateStatus('error', '✗ Mikrofon-Zugriff verweigert');
+                    addDebugLog(`Mikrofon-Fehler: ${error.message}`, 'error');
+                }
+            }
+
+            async stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                    this.isRecording = false;
+                    this.stopTimer();
+                    this.updateUI('processing');
+                    addDebugLog('Aufnahme gestoppt', 'success');
+                }
+            }
+
+            startTimer() {
+                this.timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - this.startTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    this.timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }, 1000);
+            }
+
+            stopTimer() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                }
+            }
+
+            updateUI(state) {
+                switch (state) {
+                    case 'recording':
+                        this.recordBtn.textContent = '⏹ Aufnahme stoppen';
+                        this.recordBtn.className = 'record-btn recording';
+                        this.updateStatus('recording', '🔴 Aufnahme läuft...');
+                        break;
+                    case 'processing':
+                        this.recordBtn.textContent = '⏳ KI verarbeitet...';
+                        this.recordBtn.className = 'record-btn processing';
+                        this.recordBtn.disabled = true;
+                        this.updateStatus('processing', '🤖 Audio wird transkribiert und analysiert...');
+                        break;
+                    case 'ready':
+                        this.recordBtn.textContent = '⏺ Aufnahme starten';
+                        this.recordBtn.className = 'record-btn';
+                        this.recordBtn.disabled = false;
+                        this.updateStatus('ready', '✓ Bereit für Aufnahme');
+                        this.timer.textContent = '00:00';
+                        break;
+                }
+            }
+
+            updateStatus(type, message) {
+                this.status.className = `status ${type}`;
+                this.status.textContent = message;
+            }
+
+            updateProgress(percent) {
+                this.progressFill.style.width = `${percent}%`;
+            }
+
+            async processRecording() {
+                try {
+                    this.updateProgress(10);
+                    addDebugLog('Verarbeitung gestartet...', 'info');
+                    
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                    addDebugLog(`Audio-Datei erstellt: ${(audioBlob.size / 1024 / 1024).toFixed(2)} MB`, 'info');
+                    this.updateProgress(20);
+
+                    const transcript = await this.transcribeAudio(audioBlob);
+                    this.updateProgress(60);
+
+                    const summary = await this.generateSummary(transcript);
+                    this.updateProgress(80);
+
+                    await this.saveToNotion(transcript, summary);
+                    this.updateProgress(100);
+
+                    this.updateUI('ready');
+                    this.updateStatus('completed', '✓ Erfolgreich in Notion gespeichert!');
+                    addDebugLog('Verarbeitung komplett abgeschlossen', 'success');
+
+                } catch (error) {
+                    console.error('Fehler bei der Verarbeitung:', error);
+                    this.updateStatus('error', `✗ Fehler: ${error.message}`);
+                    this.updateUI('ready');
+                    addDebugLog(`Verarbeitungsfehler: ${error.message}`, 'error');
+                }
+            }
+
+            async transcribeAudio(audioBlob) {
+                addDebugLog('OpenAI Transkription startet...', 'info');
+
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'audio.webm');
+
+                const response = await fetch('/api/transcribe?endpoint=transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    addDebugLog(`OpenAI Transkription fehlgeschlagen: ${response.statusText}`, 'error');
+                    throw new Error(`Transkription fehlgeschlagen: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                addDebugLog(`Transkription erfolgreich: ${result.text.length} Zeichen`, 'success');
+                return result.text;
+            }
+
+            async generateSummary(transcript) {
+                addDebugLog('GPT Summary Generation startet...', 'info');
+
+                const response = await fetch('/api/transcribe?endpoint=summary', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ transcript })
+                });
+
+                if (!response.ok) {
+                    addDebugLog(`GPT Summary fehlgeschlagen: ${response.statusText}`, 'error');
+                    throw new Error(`Zusammenfassung fehlgeschlagen: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const summary = JSON.parse(result.choices[0].message.content);
+                addDebugLog('Summary erfolgreich generiert', 'success');
+                return summary;
+            }
+
+            async saveToNotion(transcript, summary) {
+                const project = this.projects[this.selectedProject];
+                const title = document.getElementById('meetingTitle').value || 'Meeting';
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('de-DE');
+                const timeStr = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+                addDebugLog(`Notion Integration startet für ${project.name}...`, 'info');
+
+                const transcriptTitle = `${title} - ${dateStr} ${timeStr} - Transcript - ${project.name}`;
+                await this.createNotionEntry(project, transcriptTitle, transcript, 'Meeting recording Transcript');
+
+                const summaryTitle = `${title} - ${dateStr} ${timeStr} - Summary - ${project.name}`;
+                const summaryContent = this.formatSummaryContent(summary);
+                await this.createNotionEntry(project, summaryTitle, summaryContent, 'Meeting AI Notes');
+
+                addDebugLog('Beide Notion-Einträge erfolgreich erstellt', 'success');
+            }
+
+            formatSummaryContent(summary) {
+                let content = `**Kurze Zusammenfassung:**\n${summary.short_summary}\n\n`;
+                content += `**Details:**\n${summary.detailed_summary.map(item => `• ${item}`).join('\n')}\n\n`;
+                content += `**Action Items:**\n${summary.action_items.map(item => `☐ ${item}`).join('\n')}`;
+                return content;
+            }
+
+            async createNotionEntry(project, title, content, status) {
+                addDebugLog(`Erstelle Notion-Eintrag: ${title}`, 'info');
+                
+                const response = await fetch('/api/notion', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        dbId: project.dbId,
+                        title: title,
+                        content: content,
+                        status: status
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    addDebugLog(`Notion API Fehler: ${errorText}`, 'error');
+                    throw new Error(`Notion API Fehler: ${errorText}`);
+                } else {
+                    addDebugLog(`Notion-Eintrag erstellt: ${title}`, 'success');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new MeetingRecorder();
+        });
+    </script>
 </body>
 </html>
