@@ -11,13 +11,15 @@ export default async function handler(req) {
   const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
   // Hilfsfunktion zum Splitten
-  function splitTextIntoBlocks(text, chunkSize = 1900) {
-    const blocks = [];
-    for (let i = 0; i < text.length; i += chunkSize) {
-      blocks.push(text.slice(i, i + chunkSize));
-    }
-    return blocks;
+ function splitTextIntoBlocks(text, chunkSize = 1900) {
+  const safeText = text || ""; // falls undefined oder null
+  const blocks = [];
+  for (let i = 0; i < safeText.length; i += chunkSize) {
+    blocks.push(safeText.slice(i, i + chunkSize));
   }
+  return blocks.length ? blocks : [""];
+}
+
 
   const transcriptBlocks = splitTextIntoBlocks(transcript);
 
