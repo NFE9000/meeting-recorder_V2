@@ -1,50 +1,58 @@
 export const config = { runtime: 'edge' };
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Content-Type': 'application/json'
+};
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
+}
+
 export default async function handler(request) {
-  const cors = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json'
-  };
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: CORS_HEADERS });
+  }
+  if (request.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405);
+  }
 
-  try {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 200, headers: cors });
-    }
-    if (request.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: cors });
-    }
+  const url = new URL(request.url);
+  const endpoint = url.searchParams.get('endpoint');
 
-    const url = new URL(request.url);
-    const endpoint = url.searchParams.get('endpoint');
+  // ---------- /api/transcribe?endpoint=transcribe ----------
+  if (endpoint === 'transcribe') {
+    const formData = await request.formData();
+    if (!formData.get('model')) formData.append('model', 'gpt-4o-mini-transcribe');
 
-    // -------- TRANSCRIBE --------
-    if (endpoint === 'transcribe') {
-      const formData = await request.formData();
-      if (!formData.get('model')) formData.append('model', 'gpt-4o-mini-transcribe');
-
-      const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    let r;
+    try {
+      r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
         body: formData
       });
-
-      const txt = await r.text(); // immer Text lesen, damit wir Fehltexte zurückgeben können
-      if (!r.ok) {
-        return new Response(
-          JSON.stringify({ error: 'OpenAI transcription failed', status: r.status, details: txt }),
-          { status: 502, headers: cors }
-        );
-      }
-      return new Response(txt, { status: 200, headers: cors });
+    } catch (e) {
+      return json({ error: 'OpenAI transcription fetch failed', details: String(e) }, 502);
     }
 
-    // -------- SUMMARY --------
-    if (endpoint === 'summary') {
-      const { transcript } = await request.json();
+    const txt = await r.text();
+    if (!r.ok) {
+      return json({ error: 'OpenAI transcription failed', status: r.status, details: txt }, 502);
+    }
+    // txt ist bereits JSON-String (von OpenAI), daher direkt durchreichen
+    return new Response(txt, { status: 200, headers: CORS_HEADERS });
+  }
 
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+  // ---------- /api/transcribe?endpoint=summary ----------
+  if (endpoint === 'summary') {
+    const { transcript } = await request.json();
+
+    let r;
+    try {
+      r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -75,24 +83,18 @@ ${transcript}`
           ]
         })
       });
-
-      const txt = await r.text();
-      if (!r.ok) {
-        return new Response(
-          JSON.stringify({ error: 'OpenAI summary failed', status: r.status, details: txt }),
-          { status: 502, headers: cors }
-        );
-      }
-      return new Response(txt, { status: 200, headers: cors });
+    } catch (e) {
+      return json({ error: 'OpenAI summary fetch failed', details: String(e) }, 502);
     }
 
-    // -------- Fallback --------
-    return new Response(JSON.stringify({ error: 'Invalid endpoint' }), { status: 400, headers: cors });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ error: 'Unhandled server error', details: String(err) }), {
-      status: 500,
-      headers: cors
-    });
+    const txt = await r.text();
+    if (!r.ok) {
+      return json({ error: 'OpenAI summary failed', status: r.status, details: txt }, 502);
+    }
+    // txt ist das Chat Completions JSON (inkl. choices[0].message.content als JSON-String)
+    return new Response(txt, { status: 200, headers: CORS_HEADERS });
   }
+
+  // ---------- Fallback ----------
+  return json({ error: 'Invalid endpoint' }, 400);
 }
