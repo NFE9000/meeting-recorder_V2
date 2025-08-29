@@ -1,79 +1,91 @@
 export const config = { runtime: 'edge' };
-export default async function handler(request) {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json'
-  };
 
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
+export default async function handler(req) {
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
   }
 
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders
-    });
-  }
+  const { transcript, summary, meetingTitle, meetingDate } = await req.json();
 
-  try {
-    const { dbId, title, content, status } = await request.json();
+  const NOTION_API_KEY = process.env.NOTION_API_KEY;
+  const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
-    const notionData = {
-      parent: { database_id: dbId },
-      properties: {
-        'Name': {
-          title: [{ text: { content: title } }]
-        },
-        'Status': {
-          select: { name: status }
-        }
-      },
-      children: [
-        {
-          object: 'block',
-          type: 'paragraph',
-          paragraph: { rich_text: [{ text: { content: content } }] }
-        }
-      ]
-    };
-
-    const response = await fetch('https://api.notion.com/v1/pages', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28'
-      },
-      body: JSON.stringify(notionData)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({ 
-        error: 'Notion API Error', 
-        details: errorText 
-      }), {
-        status: response.status,
-        headers: corsHeaders
-      });
+  // Hilfsfunktion zum Splitten
+  function splitTextIntoBlocks(text, chunkSize = 1900) {
+    const blocks = [];
+    for (let i = 0; i < text.length; i += chunkSize) {
+      blocks.push(text.slice(i, i + chunkSize));
     }
-
-    const result = await response.json();
-    return new Response(JSON.stringify({ success: true, result }), {
-      status: 200,
-      headers: corsHeaders
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ 
-      error: 'Server Error', 
-      details: error.message 
-    }), {
-      status: 500,
-      headers: corsHeaders
-    });
+    return blocks;
   }
+
+  const transcriptBlocks = splitTextIntoBlocks(transcript);
+
+  const children = [];
+
+  // Summary-Block
+  children.push({
+    object: "block",
+    type: "heading_2",
+    heading_2: {
+      rich_text: [{ type: "text", text: { content: "Summary" } }]
+    }
+  });
+  children.push({
+    object: "block",
+    type: "paragraph",
+    paragraph: {
+      rich_text: [{ type: "text", text: { content: summary } }]
+    }
+  });
+
+  // Transcript-Blocks
+  children.push({
+    object: "block",
+    type: "heading_2",
+    heading_2: {
+      rich_text: [{ type: "text", text: { content: "Transcript" } }]
+    }
+  });
+  transcriptBlocks.forEach(chunk => {
+    children.push({
+      object: "block",
+      type: "paragraph",
+      paragraph: {
+        rich_text: [{ type: "text", text: { content: chunk } }]
+      }
+    });
+  });
+
+  const notionRes = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${NOTION_API_KEY}`,
+      "Content-Type": "application/json",
+      "Notion-Version": "2022-06-28"
+    },
+    body: JSON.stringify({
+      parent: { database_id: NOTION_DATABASE_ID },
+      properties: {
+        Name: {
+          title: [{ text: { content: meetingTitle } }]
+        },
+        Date: {
+          date: { start: meetingDate }
+        },
+        Status: {
+          select: { name: "Done" }
+        }
+      },
+      children
+    })
+  });
+
+  if (!notionRes.ok) {
+    const err = await notionRes.text();
+    return new Response(`Notion API Fehler: ${err}`, { status: notionRes.status });
+  }
+
+  const data = await notionRes.json();
+  return new Response(JSON.stringify(data), { status: 200 });
 }
