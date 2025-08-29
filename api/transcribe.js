@@ -42,23 +42,51 @@ export default async function handler(request) {
     }
 
     if (endpoint === 'summary') {
-      const { transcript } = await request.json();
-      const prompt = `Erstelle eine strukturierte Meeting-Zusammenfassung mit:
+  const { transcript } = await request.json();
+
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      response_format: { type: 'json_object' }, // <- zwingt valides JSON
+      messages: [
+        {
+          role: 'user',
+          content: `Erstelle eine strukturierte Meeting-Zusammenfassung mit:
 1) 2–3 Sätzen Kurzfassung
 2) 5–10 stichpunktartigen Details
 3) Action Items als Liste
 
-Das Meeting kann auf Deutsch, Englisch oder gemischt sein. Antworte in der Hauptsprache des Meetings.
+Antworte NUR als JSON mit den Keys:
+{
+  "short_summary": "…",
+  "detailed_summary": ["…","…"],
+  "action_items": ["…","…"]
+}
 
 Transkript:
-${transcript}
+${transcript}`
+        }
+      ]
+    })
+  });
 
-Antworte in folgendem JSON Format:
-{
-  "short_summary": "2-3 Sätze Zusammenfassung",
-  "detailed_summary": ["Bullet 1", "Bullet 2"],
-  "action_items": ["Action 1", "Action 2"]
-}`;
+  const txt = await r.text();
+  if (!r.ok) {
+    return new Response(JSON.stringify({ error: 'OpenAI summary failed', status: r.status, details: txt }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  // Antwort der OpenAI API (Chat Completions JSON) unverändert durchreichen
+  return new Response(txt, { status: 200, headers: { 'Content-Type': 'application/json' } });
+};
+
 
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
