@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Meeting Recorder</title>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
     body {
       font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;
       background:linear-gradient(180deg,#f5f7fa 0%,#c3cfe2 100%);
@@ -17,33 +16,30 @@
       border-radius:24px; padding:48px; max-width:480px; width:100%;
       box-shadow:0 8px 32px rgba(0,0,0,0.06); border:1px solid rgba(255,255,255,0.2);
     }
-    .header{text-align:center;margin-bottom:40px;}
-    .header h1{font-size:32px;font-weight:700;margin-bottom:8px;}
-    .header p{font-size:17px;color:#86868b;}
-    .record-section{text-align:center;margin:48px 0;}
+    .header{text-align:center;margin-bottom:30px;}
+    .header h1{font-size:28px;font-weight:700;margin-bottom:6px;}
+    .header p{font-size:15px;color:#86868b;}
+    .form-group{margin-bottom:20px;}
+    label{font-weight:600;display:block;margin-bottom:6px;}
+    select,input{width:100%;padding:12px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);}
+    .record-section{text-align:center;margin:30px 0;}
     .record-btn{
-      background:linear-gradient(135deg,#007aff 0%,#005ec4 100%);
-      color:white;border:none;padding:18px 36px;border-radius:50px;
-      font-size:17px;font-weight:600;cursor:pointer;
-      transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
-      box-shadow:0 4px 16px rgba(0,122,255,0.3);min-width:200px;
+      background:linear-gradient(135deg,#007aff 0%,#005ec4 100%);color:white;border:none;
+      padding:16px 32px;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;
     }
     .record-btn.recording{background:linear-gradient(135deg,#ff3b30 0%,#d70015 100%);}
-    .record-btn.processing{background:linear-gradient(135deg,#34c759 0%,#248a3d 100%);cursor:not-allowed;}
-    .timer{font-size:28px;font-weight:300;margin:20px 0;}
-    .status{margin:24px 0;padding:16px 20px;border-radius:12px;text-align:center;font-weight:500;font-size:15px;}
+    .record-btn.processing{background:linear-gradient(135deg,#34c759 0%,#248a3d 100%);}
+    .timer{font-size:24px;margin:12px 0;}
+    .status{margin:12px 0;padding:12px;border-radius:8px;text-align:center;font-weight:500;}
     .status.ready{background:rgba(52,199,89,0.1);}
     .status.recording{background:rgba(255,59,48,0.1);}
     .status.processing{background:rgba(0,122,255,0.1);}
     .status.completed{background:rgba(52,199,89,0.1);}
     .status.error{background:rgba(255,59,48,0.1);}
-    .progress-bar{width:100%;height:4px;background:rgba(0,0,0,0.08);border-radius:2px;margin:16px 0;}
-    .progress-fill{height:100%;background:linear-gradient(90deg,#007aff,#5ac8fa);width:0%;transition:width 0.3s;}
-    .debug-panel{background:rgba(248,248,248,0.9);border:1px solid rgba(0,0,0,0.1);
-      border-radius:12px;margin-top:24px;max-height:200px;overflow-y:auto;display:none;}
-    .debug-toggle{background:rgba(0,0,0,0.05);border:none;padding:8px 12px;border-radius:8px;
-      font-size:13px;cursor:pointer;color:#86868b;margin-bottom:16px;}
-    .debug-log{padding:8px 12px;font-size:12px;font-family:'Monaco',monospace;border-bottom:1px solid rgba(0,0,0,0.05);}
+    .debug-panel{background:#f8f8f8;border:1px solid #ddd;border-radius:8px;
+      margin-top:16px;max-height:150px;overflow-y:auto;display:none;}
+    .debug-toggle{font-size:13px;margin-bottom:10px;cursor:pointer;background:#eee;border:none;padding:6px 10px;border-radius:6px;}
+    .debug-log{font-size:12px;padding:4px 8px;}
     .debug-log.success{color:#34c759;} .debug-log.error{color:#ff3b30;} .debug-log.info{color:#007aff;}
   </style>
 </head>
@@ -51,7 +47,16 @@
   <div class="container">
     <div class="header">
       <h1>Meeting Recorder</h1>
-      <p>Intelligente Audio-Aufnahme mit KI-Transkription</p>
+      <p>Audio aufnehmen → KI-Transkript & Notion</p>
+    </div>
+
+    <div class="form-group">
+      <label for="projectSelect">Projekt auswählen</label>
+      <select id="projectSelect">
+        <option value="sonnenfarmen">☀️ Sonnenfarmen</option>
+        <option value="mikuta">🏢 MIKUTA</option>
+        <option value="heidelberger" selected>🌿 Heidelberger Chlorella</option>
+      </select>
     </div>
 
     <div class="form-group">
@@ -62,7 +67,6 @@
     <div class="record-section">
       <button id="recordBtn" class="record-btn">⏺ Aufnahme starten</button>
       <div id="timer" class="timer">00:00</div>
-      <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
     </div>
 
     <div id="status" class="status ready">✓ Bereit für Aufnahme</div>
@@ -73,15 +77,14 @@
 
   <script>
     let debugLogs = [];
-    function addDebugLog(message, type='info'){
-      const timestamp=new Date().toLocaleTimeString();
-      debugLogs.push({timestamp,message,type});
+    function addDebugLog(message,type='info'){
+      const ts=new Date().toLocaleTimeString();
+      debugLogs.push({ts,message,type});
       const panel=document.getElementById('debugPanel');
-      const logDiv=document.createElement('div');
-      logDiv.className=`debug-log ${type}`;
-      logDiv.textContent=`${timestamp} - ${message}`;
-      panel.appendChild(logDiv);
-      panel.scrollTop=panel.scrollHeight;
+      const log=document.createElement('div');
+      log.className=`debug-log ${type}`;
+      log.textContent=`${ts} - ${message}`;
+      panel.appendChild(log);panel.scrollTop=panel.scrollHeight;
     }
     function toggleDebug(){
       const panel=document.getElementById('debugPanel');
@@ -93,44 +96,37 @@
         this.recordBtn=document.getElementById('recordBtn');
         this.timer=document.getElementById('timer');
         this.status=document.getElementById('status');
-        this.progressFill=document.getElementById('progressFill');
+        this.projectSelect=document.getElementById('projectSelect');
 
         this.mediaRecorder=null;
-        this.chunkTexts=[];
-        this.inFlight=new Set();
-        this.maxParallel=3;
+        this.chunkTexts=[]; this.inFlight=new Set(); this.maxParallel=3;
         this.isRecording=false;
+
+        // Projektliste mit DB-IDs
+        this.projects={
+          sonnenfarmen:{name:"Sonnenfarmen",dbId:"f1e7db9921f24bc890910881557e4572"},
+          mikuta:{name:"MIKUTA",dbId:"206078e0d6d7802f8421df3f640a7fa3"},
+          heidelberger:{name:"Heidelberger Chlorella",dbId:"24f078e0d6d780e68b7cfe9ff914864d"}
+        };
 
         this.recordBtn.addEventListener('click',()=>this.toggleRecording());
       }
 
-      async toggleRecording(){
-        if(!this.isRecording){await this.startRecording();}
-        else{await this.stopRecording();}
-      }
+      async toggleRecording(){!this.isRecording?await this.startRecording():await this.stopRecording();}
 
       async startRecording(){
         try{
           const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-          this.mediaRecorder=new MediaRecorder(stream,{
-            mimeType:'audio/webm;codecs=opus',
-            audioBitsPerSecond:64000
-          });
+          this.mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/webm;codecs=opus',audioBitsPerSecond:64000});
 
           this.mediaRecorder.ondataavailable=async(e)=>{
             if(!e.data||e.data.size===0)return;
-            const fd=new FormData();
-            fd.append('file',e.data,`chunk-${Date.now()}.webm`);
+            const fd=new FormData(); fd.append('file',e.data,`chunk-${Date.now()}.webm`);
             fd.append('model','gpt-4o-mini-transcribe');
 
             const task=fetch('/api/transcribe?endpoint=transcribe',{method:'POST',body:fd})
               .then(r=>r.ok?r.json():r.text().then(t=>{throw new Error(t);}))
-              .then(json=>{
-                if(json?.text){
-                  this.chunkTexts.push(json.text);
-                  addDebugLog(`Chunk transkribiert (+${json.text.length} Zeichen)`,'success');
-                }
-              })
+              .then(json=>{if(json?.text){this.chunkTexts.push(json.text);addDebugLog(`Chunk ok (+${json.text.length} Zeichen)`,'success');}})
               .catch(err=>addDebugLog(`Chunk-Fehler: ${err.message}`,'error'))
               .finally(()=>this.inFlight.delete(task));
 
@@ -138,99 +134,70 @@
             if(this.inFlight.size>=this.maxParallel){await Promise.race(this.inFlight);}
           };
 
-          this.mediaRecorder.start(120000); // alle 2 Min ein Chunk
-          this.isRecording=true;
-          this.startTime=Date.now();
-          this.updateUI('recording');
-          this.startTimer();
-          addDebugLog('Aufnahme gestartet (Chunk-Mode)','success');
-        }catch(err){
-          addDebugLog(`Mikrofon-Fehler: ${err.message}`,'error');
-          this.updateStatus('error','✗ Mikrofon-Zugriff verweigert');
-        }
+          this.mediaRecorder.start(120000); // alle 2 Min
+          this.isRecording=true; this.startTime=Date.now();
+          this.updateUI('recording'); this.startTimer();
+          addDebugLog('Aufnahme gestartet (Chunk-Modus)','success');
+        }catch(err){addDebugLog(`Mic-Fehler: ${err.message}`,'error');this.updateStatus('error','✗ Mikrofonfehler');}
       }
 
       async stopRecording(){
         if(this.mediaRecorder && this.isRecording){
-          this.mediaRecorder.stop();
-          this.mediaRecorder.stream.getTracks().forEach(t=>t.stop());
-          this.isRecording=false;
-          this.stopTimer();
-          this.updateUI('processing');
-          addDebugLog('Aufnahme gestoppt – warte auf Uploads...','info');
+          this.mediaRecorder.stop();this.mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+          this.isRecording=false;this.stopTimer();this.updateUI('processing');
+          addDebugLog('Aufnahme gestoppt, warte Uploads...','info');
 
           await Promise.all([...this.inFlight]);
           const fullTranscript=this.chunkTexts.join(' ');
-          addDebugLog(`Gesamt-Transcript fertig (${fullTranscript.length} Zeichen)`,'success');
+          addDebugLog(`Transcript fertig (${fullTranscript.length} Zeichen)`,'success');
 
           const summary=await this.generateSummary(fullTranscript);
           await this.saveToNotion(fullTranscript,summary);
 
-          this.updateUI('ready');
-          this.updateStatus('completed','✓ Erfolgreich in Notion gespeichert!');
+          this.updateUI('ready');this.updateStatus('completed','✓ In Notion gespeichert!');
         }
       }
 
       async generateSummary(transcript){
-        const response=await fetch('/api/transcribe?endpoint=summary',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({transcript})
-        });
-        if(!response.ok){throw new Error(await response.text());}
-        const result=await response.json();
-        const raw=result?.choices?.[0]?.message?.content ?? '{}';
-        let summary;
-        try{summary=JSON.parse(raw);}catch{throw new Error('Summary JSON Fehler');}
-        return summary;
+        const res=await fetch('/api/transcribe?endpoint=summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript})});
+        if(!res.ok)throw new Error(await res.text());
+        const result=await res.json();const raw=result?.choices?.[0]?.message?.content??'{}';
+        return JSON.parse(raw);
       }
 
       async saveToNotion(transcript,summary){
+        const projectKey=this.projectSelect.value;
+        const project=this.projects[projectKey];
         const title=document.getElementById('meetingTitle').value||'Meeting';
-        const now=new Date();
-        const dateStr=now.toLocaleDateString('de-DE');
-        const timeStr=now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+        const now=new Date();const dateStr=now.toLocaleDateString('de-DE');const timeStr=now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 
-        const transcriptTitle=`${title} - ${dateStr} ${timeStr} - Transcript`;
-        await this.createNotionEntry(transcriptTitle,transcript,'Meeting recording Transcript');
+        const transcriptTitle=`${title} - ${dateStr} ${timeStr} - Transcript - ${project.name}`;
+        await this.createNotionEntry(project.dbId,transcriptTitle,transcript,'Meeting recording Transcript');
 
-        const summaryTitle=`${title} - ${dateStr} ${timeStr} - Summary`;
+        const summaryTitle=`${title} - ${dateStr} ${timeStr} - Summary - ${project.name}`;
         const summaryContent=this.formatSummaryContent(summary);
-        await this.createNotionEntry(summaryTitle,summaryContent,'Meeting AI Notes');
+        await this.createNotionEntry(project.dbId,summaryTitle,summaryContent,'Meeting AI Notes');
       }
 
       formatSummaryContent(summary){
-        let content=`Kurze Zusammenfassung:\n${summary.short_summary}\n\n`;
-        content+=`Details:\n${summary.detailed_summary.map(i=>`• ${i}`).join('\n')}\n\n`;
-        content+=`Action Items:\n${summary.action_items.map(i=>`☐ ${i}`).join('\n')}`;
-        return content;
+        let txt=`Kurze Zusammenfassung:\n${summary.short_summary}\n\n`;
+        txt+=`Details:\n${summary.detailed_summary.map(i=>`• ${i}`).join('\n')}\n\n`;
+        txt+=`Action Items:\n${summary.action_items.map(i=>`☐ ${i}`).join('\n')}`;
+        return txt;
       }
 
-      async createNotionEntry(title,content,status){
-        const response=await fetch('/api/notion',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({dbId:process.env.NOTION_DATABASE_ID,title,content,status})
-        });
-        if(!response.ok){throw new Error(await response.text());}
-        addDebugLog(`Notion-Page erstellt: ${title}`,'success');
+      async createNotionEntry(dbId,title,content,status){
+        const res=await fetch('/api/notion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dbId,title,content,status})});
+        if(!res.ok)throw new Error(await res.text());
+        addDebugLog(`Notion-Eintrag erstellt: ${title}`,'success');
       }
 
-      startTimer(){
-        this.timerInterval=setInterval(()=>{
-          const elapsed=Date.now()-this.startTime;
-          const m=Math.floor(elapsed/60000);
-          const s=Math.floor((elapsed%60000)/1000);
-          this.timer.textContent=`${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-        },1000);
-      }
+      startTimer(){this.timerInterval=setInterval(()=>{const e=Date.now()-this.startTime;const m=Math.floor(e/60000);const s=Math.floor((e%60000)/1000);this.timer.textContent=`${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;},1000);}
       stopTimer(){if(this.timerInterval){clearInterval(this.timerInterval);this.timerInterval=null;}}
-      updateUI(state){
-        switch(state){
-          case'recording':this.recordBtn.textContent='⏹ Aufnahme stoppen';this.recordBtn.className='record-btn recording';this.updateStatus('recording','🔴 Aufnahme läuft...');break;
-          case'processing':this.recordBtn.textContent='⏳ Verarbeite...';this.recordBtn.className='record-btn processing';this.recordBtn.disabled=true;this.updateStatus('processing','🤖 Transkription läuft...');break;
-          case'ready':this.recordBtn.textContent='⏺ Aufnahme starten';this.recordBtn.className='record-btn';this.recordBtn.disabled=false;this.updateStatus('ready','✓ Bereit für Aufnahme');this.timer.textContent='00:00';break;
-        }
-      }
-      updateStatus(type,message){this.status.className=`status ${type}`;this.status.textContent=message;}
+      updateUI(st){if(st==='recording'){this.recordBtn.textContent='⏹ Aufnahme stoppen';this.recordBtn.className='record-btn recording';this.updateStatus('recording','🔴 Aufnahme läuft...');}
+        else if(st==='processing'){this.recordBtn.textContent='⏳ Verarbeite...';this.recordBtn.className='record-btn processing';this.recordBtn.disabled=true;this.updateStatus('processing','🤖 Transkription läuft...');}
+        else if(st==='ready'){this.recordBtn.textContent='⏺ Aufnahme starten';this.recordBtn.className='record-btn';this.recordBtn.disabled=false;this.updateStatus('ready','✓ Bereit für Aufnahme');this.timer.textContent='00:00';}}
+      updateStatus(type,msg){this.status.className=`status ${type}`;this.status.textContent=msg;}
     }
 
     document.addEventListener('DOMContentLoaded',()=>new MeetingRecorder());
