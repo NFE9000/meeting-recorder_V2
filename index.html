@@ -85,6 +85,12 @@
         <button id="chooseTabAudio" style="padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#f6f6f6;">Quelle wählen</button>
         <span id="systemAudioStatus" class="muted">Aus</span>
       </div>
+      <div style="margin-top:8px;">
+        <label for="systemInputSelect" style="font-weight:600;">Oder: Systemquelle (virtuelles Device wie BlackHole)</label>
+        <select id="systemInputSelect">
+          <option value="">(Keine Geräteeingabe)</option>
+        </select>
+      </div>
       <div id="sysLevel" style="margin-top:8px;height:8px;background:#eee;border-radius:4px;overflow:hidden;">
         <div id="sysLevelBar" style="height:100%;width:0%;background:linear-gradient(90deg,#34c759,#ff9f0a,#ff3b30);"></div>
       </div>
@@ -145,6 +151,7 @@
         this.chooseTabAudioBtn = document.getElementById('chooseTabAudio');
         this.systemAudioStatus = document.getElementById('systemAudioStatus');
         this.sysLevelBar = document.getElementById('sysLevelBar');
+        this.systemInputSelect = document.getElementById('systemInputSelect');
 
         this.mediaRecorder = null;
         this.isRecording = false;
@@ -189,6 +196,7 @@
         this.systemAudioEnabled = false;
         this.captureSystemAudio.addEventListener('change', () => this.toggleSystemAudio());
         this.chooseTabAudioBtn.addEventListener('click', (e) => { e.preventDefault(); this.pickSystemAudioSource(); });
+        this.systemInputSelect.addEventListener('change', () => this.pickSystemInputDevice());
       }
 
       async initDevices(){
@@ -220,6 +228,22 @@
           }
 
           addDebugLog(`Gefundene Mikrofone: ${audioInputs.length}`, 'info');
+
+          // Systeminput-Geräte (inkl. virtuelle Devices) befüllen
+          const sysSel = this.systemInputSelect;
+          const prevSys = sysSel.value;
+          sysSel.innerHTML = '';
+          const noneOpt = document.createElement('option');
+          noneOpt.value = '';
+          noneOpt.textContent = '(Keine Geräteeingabe)';
+          sysSel.appendChild(noneOpt);
+          audioInputs.forEach((d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = d.deviceId;
+            opt.textContent = d.label || `Eingang ${idx+1}`;
+            sysSel.appendChild(opt);
+          });
+          if([...sysSel.options].some(o => o.value === prevSys)) sysSel.value = prevSys;
         } catch(err){
           addDebugLog(`Geräte-Init Fehler: ${err.message}`, 'error');
         }
@@ -318,6 +342,28 @@
           this.setupSystemLevelMeter();
         } catch(err){
           addDebugLog(`Systemaudio Auswahl abgebrochen/fehlgeschlagen: ${err.message}`, 'error');
+        }
+      }
+
+      async pickSystemInputDevice(){
+        try{
+          const deviceId = this.systemInputSelect.value;
+          if(!deviceId){
+            // Wenn leer gewählt, nichts tun; Tab-Audio kann weiterhin genutzt werden
+            return;
+          }
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, channelCount: 2 }
+          });
+          // Ersetzt ggf. vorhandene Systemquelle
+          if(this.systemPreviewStream){ this.systemPreviewStream.getTracks().forEach(t=>t.stop()); }
+          this.systemPreviewStream = stream;
+          this.systemAudioEnabled = true;
+          this.captureSystemAudio.checked = true;
+          this.systemAudioStatus.textContent = 'Geräteeingang gewählt';
+          this.setupSystemLevelMeter();
+        } catch(err){
+          addDebugLog(`Systemeingang fehlgeschlagen: ${err.message}`, 'error');
         }
       }
 
