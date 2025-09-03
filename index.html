@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -335,10 +336,11 @@
           const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
           this.activeStream = stream;
           addDebugLog(`Aufnahmegerät: ${chosenDeviceId || 'Standard'}`, 'info');
-          // Reset Chunks vor neuer Session
+          // Reset
           this.chunkTexts = [];
+          this.segments = [];
 
-          // Wähle kompatiblen MIME-Type
+          // MIME wählen
           let chosenMime = undefined;
           if(window.MediaRecorder && MediaRecorder.isTypeSupported){
             if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')){
@@ -350,15 +352,21 @@
             }
           }
           this.recorderMime = chosenMime;
+
+          // Segment-Start referenzieren
+          this.segmentStartMs = Date.now();
           await this.startSegmentRecorder();
+          if(this.systemAudioEnabled && this.systemPreviewStream){
+            await this.startSystemSegmentRecorder();
+          }
+
           this.isRecording = true;
           this.startTime = Date.now();
           this.startTimer();
           this.updateUI('recording');
-          addDebugLog('Aufnahme gestartet (Rolling 60s Segmente)', 'success');
+          addDebugLog('Aufnahme gestartet (Rolling 60s Segmente, Mic+optional System)', 'success');
 
-          // Alle 60s Segment rotieren (vollständige Datei je Segment)
-          this.segmentTimerId = setInterval(() => this.rotateSegment(), this.segmentDurationMs);
+          this.segmentTimerId = setInterval(() => this.rotateBothSegments(), this.segmentDurationMs);
         } catch(err){
           addDebugLog(`Mikrofon-Fehler: ${err.message}`, 'error');
           this.updateStatus('error', '✗ Mikrofon-Zugriff verweigert');
@@ -366,93 +374,111 @@
       }
 
       async startSegmentRecorder(){
-        // neuen Recorder anlegen und starten
         this.recordedChunks = [];
         this.mediaRecorder = new MediaRecorder(
           this.activeStream,
           Object.assign({}, this.recorderMime ? { mimeType: this.recorderMime } : {}, { audioBitsPerSecond: 32000 })
         );
-        addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || this.recorderMime || 'default'}`, 'info');
-        this.mediaRecorder.ondataavailable = (e) => {
-          if(e.data && e.data.size > 0){ this.recordedChunks.push(e.data); }
-        };
+        this.mediaRecorder.ondataavailable = (e) => { if(e.data && e.data.size > 0){ this.recordedChunks.push(e.data); } };
         this.mediaRecorder.start();
       }
 
-      async rotateSegment(){
-        if(!this.mediaRecorder || this.mediaRecorder.state !== 'recording') return;
-        const stopped = new Promise(resolve => {
-          const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
-          this.mediaRecorder.addEventListener('stop', handler, { once: true });
-        });
-        this.mediaRecorder.stop();
-        await stopped;
-        // Nach Stop: Segment hochladen, dann neuen Recorder starten
-        await this.uploadCurrentSegment();
-        await this.startSegmentRecorder();
+      async startSystemSegmentRecorder(){
+        this.systemRecordedChunks = [];
+        this.systemRecorder = new MediaRecorder(
+          this.systemPreviewStream,
+          Object.assign({}, this.recorderMime ? { mimeType: this.recorderMime } : {}, { audioBitsPerSecond: 32000 })
+        );
+        this.systemRecorder.ondataavailable = (e) => { if(e.data && e.data.size > 0){ this.systemRecordedChunks.push(e.data); } };
+        this.systemRecorder.start();
       }
 
-      async uploadCurrentSegment(){
+      async rotateBothSegments(){
+        const prevStart = this.segmentStartMs;
+        this.segmentStartMs = Date.now();
+        await this.rotateSegment('mic', prevStart);
+        if(this.systemRecorder && this.systemRecorder.state === 'recording'){
+          await this.rotateSegment('system', prevStart);
+        }
+      }
+
+      async rotateSegment(track, startMs){
+        if(track === 'mic'){
+          if(!this.mediaRecorder || this.mediaRecorder.state !== 'recording') return;
+          const stopped = new Promise(resolve => { const h=()=>{ this.mediaRecorder.removeEventListener('stop', h); resolve(); }; this.mediaRecorder.addEventListener('stop', h, { once:true }); });
+          this.mediaRecorder.stop();
+          await stopped;
+          await this.uploadCurrentSegment('mic', startMs);
+          await this.startSegmentRecorder();
+        } else if(track === 'system'){
+          if(!this.systemRecorder || this.systemRecorder.state !== 'recording') return;
+          const stopped = new Promise(resolve => { const h=()=>{ this.systemRecorder.removeEventListener('stop', h); resolve(); }; this.systemRecorder.addEventListener('stop', h, { once:true }); });
+          this.systemRecorder.stop();
+          await stopped;
+          await this.uploadCurrentSegment('system', startMs);
+          await this.startSystemSegmentRecorder();
+        }
+      }
+
+      async uploadCurrentSegment(track, startMs){
         try{
-          const ext = (this.mediaRecorder?.mimeType || this.recorderMime || '').includes('mp4') ? 'mp4' : 'webm';
-          const fileType = this.mediaRecorder?.mimeType || this.recorderMime || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
-          const fullBlob = new Blob(this.recordedChunks, { type: fileType });
-          this.recordedChunks = [];
-          if(fullBlob.size === 0){
-            addDebugLog('Überspringe leeres Segment', 'error');
-            return;
-          }
+          const isSystem = track === 'system';
+          const rec = isSystem ? this.systemRecorder : this.mediaRecorder;
+          const chunks = isSystem ? this.systemRecordedChunks : this.recordedChunks;
+          const ext = (rec?.mimeType || this.recorderMime || '').includes('mp4') ? 'mp4' : 'webm';
+          const fileType = rec?.mimeType || this.recorderMime || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
+          const fullBlob = new Blob(chunks, { type: fileType });
+          if(isSystem) this.systemRecordedChunks = []; else this.recordedChunks = [];
+          if(fullBlob.size === 0){ addDebugLog(`Überspringe leeres ${track}-Segment`, 'error'); return; }
+
           const fd = new FormData();
-          fd.append('file', fullBlob, `segment-${Date.now()}.${ext}`);
+          fd.append('file', fullBlob, `${track}-segment-${startMs}.${ext}`);
           fd.append('model', 'gpt-4o-mini-transcribe');
+          fd.append('track', track);
+          fd.append('segmentStartMs', String(startMs));
+
           const task = fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd })
             .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
             .then(json => {
+              // json.text (string) – wir speichern mit Zeitstempel
               if(typeof json?.text === 'string'){
-                this.chunkTexts.push(json.text);
-                addDebugLog(`Segment ok (+${json.text.length} Zeichen)`, 'success');
+                this.segments.push({ track, startMs, text: json.text });
+                addDebugLog(`${track} Segment ok (+${json.text.length} Zeichen)`, 'success');
               } else {
-                addDebugLog('Segment ohne Text', 'error');
+                addDebugLog(`${track} Segment ohne Text`, 'error');
               }
             })
-            .catch(err => addDebugLog(`Segment-Fehler: ${err.message}`, 'error'))
+            .catch(err => addDebugLog(`${track} Segment-Fehler: ${err.message}`, 'error'))
             .finally(() => this.inFlight.delete(task));
+
           this.inFlight.add(task);
-          if(this.inFlight.size >= this.maxParallel){
-            await Promise.race(this.inFlight);
-          }
-        } catch(err){
-          addDebugLog(`Upload-Fehler: ${err.message}`, 'error');
-        }
+          if(this.inFlight.size >= this.maxParallel){ await Promise.race(this.inFlight); }
+        } catch(err){ addDebugLog(`Upload-Fehler (${track}): ${err.message}`, 'error'); }
       }
 
       async stopRecording(){
         if(this.mediaRecorder && this.isRecording){
-          // Segment-Timer stoppen
           if(this.segmentTimerId){ clearInterval(this.segmentTimerId); this.segmentTimerId = null; }
-          // Letztes Segment schließen und hochladen
           if(this.mediaRecorder.state === 'recording'){
-            const stopped = new Promise(resolve => {
-              const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
-              this.mediaRecorder.addEventListener('stop', handler, { once: true });
-            });
-            this.mediaRecorder.stop();
-            await stopped;
+            const stopped = new Promise(resolve => { const h=()=>{ this.mediaRecorder.removeEventListener('stop', h); resolve(); }; this.mediaRecorder.addEventListener('stop', h, { once:true }); });
+            this.mediaRecorder.stop(); await stopped; await this.uploadCurrentSegment('mic', this.segmentStartMs);
           }
-          await this.uploadCurrentSegment();
-          // Stream beenden
-          if(this.activeStream){
-            this.activeStream.getTracks().forEach(t => t.stop());
-            this.activeStream = null;
+          if(this.systemRecorder && this.systemRecorder.state === 'recording'){
+            const stopped2 = new Promise(resolve => { const h=()=>{ this.systemRecorder.removeEventListener('stop', h); resolve(); }; this.systemRecorder.addEventListener('stop', h, { once:true }); });
+            this.systemRecorder.stop(); await stopped2; await this.uploadCurrentSegment('system', this.segmentStartMs);
           }
+          if(this.activeStream){ this.activeStream.getTracks().forEach(t=>t.stop()); this.activeStream=null; }
+          if(this.systemPreviewStream){ this.systemPreviewStream.getTracks().forEach(t=>t.stop()); this.systemPreviewStream=null; }
           this.isRecording = false;
           this.stopTimer();
           this.updateUI('processing');
           addDebugLog('Aufnahme gestoppt – warte auf Segment-Uploads...', 'info');
 
-          // Warten, bis alle Uploads durch sind
           while(this.inFlight.size > 0){ await Promise.race(this.inFlight); }
-          const fullTranscript = this.chunkTexts.join(' ');
+
+          // Merge: chronologisch nach startMs, bei Gleichstand Mic bevorzugen
+          this.segments.sort((a,b)=> a.startMs===b.startMs ? (a.track==='mic'?-1:1) : a.startMs-b.startMs);
+          const fullTranscript = this.segments.map(s => s.text).join(' ');
           addDebugLog(`Transcript fertig (${fullTranscript.length} Zeichen)`, 'success');
 
           const summary = await this.generateSummary(fullTranscript);
