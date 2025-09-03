@@ -135,6 +135,9 @@
         this.recordedChunks = [];
         this.inFlight = new Set();
         this.maxParallel = 3;
+        this.segmentDurationMs = 60000; // 60s Segmente für Vercel Limits
+        this.segmentTimerId = null;
+        this.activeStream = null;
 
         // Projektliste mit DB-IDs
         this.projects = {
@@ -260,6 +263,7 @@
             : { echoCancellation: true, noiseSuppression: true, channelCount: 1 };
 
           const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+          this.activeStream = stream;
           addDebugLog(`Aufnahmegerät: ${chosenDeviceId || 'Standard'}`, 'info');
           // Reset Chunks vor neuer Session
           this.chunkTexts = [];
@@ -275,67 +279,110 @@
               chosenMime = 'audio/mp4';
             }
           }
-          this.mediaRecorder = new MediaRecorder(
-            stream,
-            Object.assign({}, chosenMime ? { mimeType: chosenMime } : {}, { audioBitsPerSecond: 32000 })
-          );
-          addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || chosenMime || 'default'}`, 'info');
-
-          // Chunks nur lokal puffern; finalen Blob nach Stop senden (sicherer für Container-Header)
-          this.mediaRecorder.ondataavailable = (e) => {
-            if(e.data && e.data.size > 0){
-              this.recordedChunks.push(e.data);
-            }
-          };
-
-          this.mediaRecorder.start(); // ohne Timeslice, vollständige Datei
+          this.recorderMime = chosenMime;
+          await this.startSegmentRecorder();
           this.isRecording = true;
           this.startTime = Date.now();
           this.startTimer();
           this.updateUI('recording');
-          addDebugLog('Aufnahme gestartet (Vollaufnahme, ein Upload am Ende)', 'success');
+          addDebugLog('Aufnahme gestartet (Rolling 60s Segmente)', 'success');
+
+          // Alle 60s Segment rotieren (vollständige Datei je Segment)
+          this.segmentTimerId = setInterval(() => this.rotateSegment(), this.segmentDurationMs);
         } catch(err){
           addDebugLog(`Mikrofon-Fehler: ${err.message}`, 'error');
           this.updateStatus('error', '✗ Mikrofon-Zugriff verweigert');
         }
       }
 
+      async startSegmentRecorder(){
+        // neuen Recorder anlegen und starten
+        this.recordedChunks = [];
+        this.mediaRecorder = new MediaRecorder(
+          this.activeStream,
+          Object.assign({}, this.recorderMime ? { mimeType: this.recorderMime } : {}, { audioBitsPerSecond: 32000 })
+        );
+        addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || this.recorderMime || 'default'}`, 'info');
+        this.mediaRecorder.ondataavailable = (e) => {
+          if(e.data && e.data.size > 0){ this.recordedChunks.push(e.data); }
+        };
+        this.mediaRecorder.start();
+      }
+
+      async rotateSegment(){
+        if(!this.mediaRecorder || this.mediaRecorder.state !== 'recording') return;
+        const stopped = new Promise(resolve => {
+          const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
+          this.mediaRecorder.addEventListener('stop', handler, { once: true });
+        });
+        this.mediaRecorder.stop();
+        await stopped;
+        // Nach Stop: Segment hochladen, dann neuen Recorder starten
+        await this.uploadCurrentSegment();
+        await this.startSegmentRecorder();
+      }
+
+      async uploadCurrentSegment(){
+        try{
+          const ext = (this.mediaRecorder?.mimeType || this.recorderMime || '').includes('mp4') ? 'mp4' : 'webm';
+          const fileType = this.mediaRecorder?.mimeType || this.recorderMime || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
+          const fullBlob = new Blob(this.recordedChunks, { type: fileType });
+          this.recordedChunks = [];
+          if(fullBlob.size === 0){
+            addDebugLog('Überspringe leeres Segment', 'error');
+            return;
+          }
+          const fd = new FormData();
+          fd.append('file', fullBlob, `segment-${Date.now()}.${ext}`);
+          fd.append('model', 'gpt-4o-mini-transcribe');
+          const task = fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd })
+            .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
+            .then(json => {
+              if(typeof json?.text === 'string'){
+                this.chunkTexts.push(json.text);
+                addDebugLog(`Segment ok (+${json.text.length} Zeichen)`, 'success');
+              } else {
+                addDebugLog('Segment ohne Text', 'error');
+              }
+            })
+            .catch(err => addDebugLog(`Segment-Fehler: ${err.message}`, 'error'))
+            .finally(() => this.inFlight.delete(task));
+          this.inFlight.add(task);
+          if(this.inFlight.size >= this.maxParallel){
+            await Promise.race(this.inFlight);
+          }
+        } catch(err){
+          addDebugLog(`Upload-Fehler: ${err.message}`, 'error');
+        }
+      }
+
       async stopRecording(){
         if(this.mediaRecorder && this.isRecording){
-          // Auf 'stop' warten, damit letztes ondataavailable sicher erfolgt ist
-          const stopped = new Promise(resolve => {
-            const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
-            this.mediaRecorder.addEventListener('stop', handler, { once: true });
-          });
-          this.mediaRecorder.stop();
-          await stopped;
-          if(this.mediaRecorder.stream){
-            this.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+          // Segment-Timer stoppen
+          if(this.segmentTimerId){ clearInterval(this.segmentTimerId); this.segmentTimerId = null; }
+          // Letztes Segment schließen und hochladen
+          if(this.mediaRecorder.state === 'recording'){
+            const stopped = new Promise(resolve => {
+              const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
+              this.mediaRecorder.addEventListener('stop', handler, { once: true });
+            });
+            this.mediaRecorder.stop();
+            await stopped;
+          }
+          await this.uploadCurrentSegment();
+          // Stream beenden
+          if(this.activeStream){
+            this.activeStream.getTracks().forEach(t => t.stop());
+            this.activeStream = null;
           }
           this.isRecording = false;
           this.stopTimer();
           this.updateUI('processing');
-          addDebugLog('Aufnahme gestoppt – lade komplette Datei hoch...', 'info');
+          addDebugLog('Aufnahme gestoppt – warte auf Segment-Uploads...', 'info');
 
-          // Kompletten Blob bilden und transkribieren
-          const ext = (this.mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
-          const fileType = this.mediaRecorder.mimeType || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
-          const fullBlob = new Blob(this.recordedChunks, { type: fileType });
-          this.recordedChunks = [];
-          const fd = new FormData();
-          fd.append('file', fullBlob, `recording-${Date.now()}.${ext}`);
-          fd.append('model', 'gpt-4o-mini-transcribe');
-
-          const transRes = await fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd });
-          if(!transRes.ok){
-            const errTxt = await transRes.text();
-            addDebugLog(`Transkription fehlgeschlagen: ${errTxt}`, 'error');
-            this.updateUI('ready');
-            this.updateStatus('error', '✗ Transkription fehlgeschlagen');
-            return;
-          }
-          const transJson = await transRes.json();
-          const fullTranscript = typeof transJson?.text === 'string' ? transJson.text : '';
+          // Warten, bis alle Uploads durch sind
+          while(this.inFlight.size > 0){ await Promise.race(this.inFlight); }
+          const fullTranscript = this.chunkTexts.join(' ');
           addDebugLog(`Transcript fertig (${fullTranscript.length} Zeichen)`, 'success');
 
           const summary = await this.generateSummary(fullTranscript);
