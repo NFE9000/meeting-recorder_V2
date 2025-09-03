@@ -67,6 +67,9 @@
       <select id="micSelect">
         <option value="">(Standardgerät)</option>
       </select>
+      <div id="micLevel" style="margin-top:8px;height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+        <div id="micLevelBar" style="height:100%;width:0%;background:linear-gradient(90deg,#34c759,#ff9f0a,#ff3b30);"></div>
+      </div>
     </div>
 
     <div class="form-group">
@@ -119,6 +122,7 @@
         this.status = document.getElementById('status');
         this.micSelect = document.getElementById('micSelect');
         this.projectSelect = document.getElementById('projectSelect');
+        this.micLevelBar = document.getElementById('micLevelBar');
 
         this.mediaRecorder = null;
         this.isRecording = false;
@@ -144,6 +148,15 @@
         if(navigator.mediaDevices && 'ondevicechange' in navigator.mediaDevices){
           navigator.mediaDevices.addEventListener('devicechange', () => this.initDevices());
         }
+
+        // Live-Pegel-Visualizer initialisieren
+        this.levelAnimationId = null;
+        this.analyser = null;
+        this.audioContext = null;
+        this.meterSource = null;
+        this.currentPreviewStream = null;
+        this.micSelect.addEventListener('change', () => this.setupLevelMeter());
+        this.setupLevelMeter();
       }
 
       async initDevices(){
@@ -177,6 +190,58 @@
           addDebugLog(`Gefundene Mikrofone: ${audioInputs.length}`, 'info');
         } catch(err){
           addDebugLog(`Geräte-Init Fehler: ${err.message}`, 'error');
+        }
+      }
+
+      async setupLevelMeter(){
+        try{
+          // Vorherige Ressourcen schließen
+          if(this.levelAnimationId){
+            cancelAnimationFrame(this.levelAnimationId);
+            this.levelAnimationId = null;
+          }
+          if(this.currentPreviewStream){
+            this.currentPreviewStream.getTracks().forEach(t => t.stop());
+            this.currentPreviewStream = null;
+          }
+          if(this.audioContext){
+            try{ await this.audioContext.close(); } catch(_){}
+            this.audioContext = null;
+          }
+
+          const chosenDeviceId = this.micSelect?.value || '';
+          const audioConstraints = chosenDeviceId
+            ? { deviceId: { exact: chosenDeviceId }, echoCancellation: true, noiseSuppression: true, channelCount: 1 }
+            : { echoCancellation: true, noiseSuppression: true, channelCount: 1 };
+          // Separate Stream nur für Preview, damit Aufnahme-Stream unabhängig bleibt
+          this.currentPreviewStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.analyser = this.audioContext.createAnalyser();
+          this.analyser.fftSize = 512;
+          const source = this.audioContext.createMediaStreamSource(this.currentPreviewStream);
+          source.connect(this.analyser);
+          this.meterSource = source;
+
+          const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+          const update = () => {
+            if(!this.analyser) return;
+            this.analyser.getByteTimeDomainData(dataArray);
+            // RMS berechnen
+            let sumSquares = 0;
+            for(let i=0;i<dataArray.length;i++){
+              const v = (dataArray[i] - 128) / 128; // -1..1
+              sumSquares += v*v;
+            }
+            const rms = Math.sqrt(sumSquares / dataArray.length); // 0..1
+            const pct = Math.min(100, Math.max(0, Math.round(rms * 100)));
+            if(this.micLevelBar){ this.micLevelBar.style.width = pct + '%'; }
+            this.levelAnimationId = requestAnimationFrame(update);
+          };
+          update();
+        } catch(err){
+          if(this.micLevelBar){ this.micLevelBar.style.width = '0%'; }
+          addDebugLog(`Pegel-Meter Fehler: ${err.message}`, 'error');
         }
       }
 
