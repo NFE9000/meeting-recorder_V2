@@ -259,25 +259,44 @@
 
           const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
           addDebugLog(`Aufnahmegerät: ${chosenDeviceId || 'Standard'}`, 'info');
-          this.mediaRecorder = new MediaRecorder(stream, {
-            mimeType: 'audio/webm;codecs=opus',
-            audioBitsPerSecond: 64000
-          });
+          // Reset Chunks vor neuer Session
+          this.chunkTexts = [];
 
-          // alle 2 Minuten fertigen Chunk liefern
+          // Wähle kompatiblen MIME-Type
+          let chosenMime = undefined;
+          if(window.MediaRecorder && MediaRecorder.isTypeSupported){
+            if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')){
+              chosenMime = 'audio/webm;codecs=opus';
+            } else if(MediaRecorder.isTypeSupported('audio/webm')){
+              chosenMime = 'audio/webm';
+            } else if(MediaRecorder.isTypeSupported('audio/mp4')){
+              chosenMime = 'audio/mp4';
+            }
+          }
+          this.mediaRecorder = new MediaRecorder(
+            stream,
+            Object.assign({}, chosenMime ? { mimeType: chosenMime } : {}, { audioBitsPerSecond: 64000 })
+          );
+          addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || chosenMime || 'default'}`, 'info');
+
+          // regelmässig fertige Chunks liefern
           this.mediaRecorder.ondataavailable = async (e) => {
             if(!e.data || e.data.size === 0) return;
 
             const fd = new FormData();
-            fd.append('file', e.data, `chunk-${Date.now()}.webm`);
+            const ext = (this.mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+            fd.append('file', e.data, `chunk-${Date.now()}.${ext}`);
             fd.append('model', 'gpt-4o-mini-transcribe');
 
             const task = fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd })
               .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
               .then(json => {
-                if(json?.text){
+                if(typeof json?.text === 'string'){
                   this.chunkTexts.push(json.text);
                   addDebugLog(`Chunk ok (+${json.text.length} Zeichen)`, 'success');
+                  if(json.text.length === 0){
+                    addDebugLog('Warnung: Chunk-Transkript ist leer', 'error');
+                  }
                 } else {
                   addDebugLog(`Chunk ohne Text`, 'error');
                 }
@@ -291,12 +310,12 @@
             }
           };
 
-          this.mediaRecorder.start(120000); // 2 Minuten Timeslice
+          this.mediaRecorder.start(5000); // 5s Timeslice
           this.isRecording = true;
           this.startTime = Date.now();
           this.startTimer();
           this.updateUI('recording');
-          addDebugLog('Aufnahme gestartet (Chunk-Modus 2 Min)', 'success');
+          addDebugLog('Aufnahme gestartet (Chunk-Modus 5s)', 'success');
         } catch(err){
           addDebugLog(`Mikrofon-Fehler: ${err.message}`, 'error');
           this.updateStatus('error', '✗ Mikrofon-Zugriff verweigert');
@@ -305,14 +324,24 @@
 
       async stopRecording(){
         if(this.mediaRecorder && this.isRecording){
+          // Auf 'stop' warten, damit letztes ondataavailable sicher erfolgt ist
+          const stopped = new Promise(resolve => {
+            const handler = () => { this.mediaRecorder.removeEventListener('stop', handler); resolve(); };
+            this.mediaRecorder.addEventListener('stop', handler, { once: true });
+          });
           this.mediaRecorder.stop();
-          this.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+          await stopped;
+          if(this.mediaRecorder.stream){
+            this.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+          }
           this.isRecording = false;
           this.stopTimer();
           this.updateUI('processing');
           addDebugLog('Aufnahme gestoppt – warte auf Uploads...', 'info');
 
-          await Promise.all([...this.inFlight]);
+          while(this.inFlight.size > 0){
+            await Promise.race(this.inFlight);
+          }
 
           const fullTranscript = this.chunkTexts.join(' ');
           addDebugLog(`Transcript fertig (${fullTranscript.length} Zeichen)`, 'success');
