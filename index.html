@@ -63,6 +63,13 @@
     <div class="muted">Audio aufnehmen → KI-Transkription → Notion</div>
 
     <div class="form-group">
+      <label for="micSelect">Mikrofon auswählen</label>
+      <select id="micSelect">
+        <option value="">(Standardgerät)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
       <label for="projectSelect">Projekt auswählen</label>
       <select id="projectSelect">
         <option value="sonnenfarmen">☀️ Sonnenfarmen</option>
@@ -110,6 +117,7 @@
         this.recordBtn = document.getElementById('recordBtn');
         this.timer = document.getElementById('timer');
         this.status = document.getElementById('status');
+        this.micSelect = document.getElementById('micSelect');
         this.projectSelect = document.getElementById('projectSelect');
 
         this.mediaRecorder = null;
@@ -130,6 +138,46 @@
         };
 
         this.recordBtn.addEventListener('click', () => this.toggleRecording());
+
+        // Geräte initialisieren
+        this.initDevices();
+        if(navigator.mediaDevices && 'ondevicechange' in navigator.mediaDevices){
+          navigator.mediaDevices.addEventListener('devicechange', () => this.initDevices());
+        }
+      }
+
+      async initDevices(){
+        try{
+          // Erstes getUserMedia, um Gerätebezeichnungen freizugeben
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+          const select = this.micSelect;
+          const prev = select.value;
+          // Reset options
+          select.innerHTML = '';
+          const defaultOpt = document.createElement('option');
+          defaultOpt.value = '';
+          defaultOpt.textContent = '(Standardgerät)';
+          select.appendChild(defaultOpt);
+
+          audioInputs.forEach((d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = d.deviceId;
+            opt.textContent = d.label || `Mikrofon ${idx+1}`;
+            select.appendChild(opt);
+          });
+
+          // Wiederherstellen, falls möglich
+          if([...select.options].some(o => o.value === prev)){
+            select.value = prev;
+          }
+
+          addDebugLog(`Gefundene Mikrofone: ${audioInputs.length}`, 'info');
+        } catch(err){
+          addDebugLog(`Geräte-Init Fehler: ${err.message}`, 'error');
+        }
       }
 
       async toggleRecording(){
@@ -139,7 +187,13 @@
 
       async startRecording(){
         try{
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const chosenDeviceId = this.micSelect?.value || '';
+          const audioConstraints = chosenDeviceId
+            ? { deviceId: { exact: chosenDeviceId }, echoCancellation: true, noiseSuppression: true, channelCount: 1 }
+            : { echoCancellation: true, noiseSuppression: true, channelCount: 1 };
+
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+          addDebugLog(`Aufnahmegerät: ${chosenDeviceId || 'Standard'}`, 'info');
           this.mediaRecorder = new MediaRecorder(stream, {
             mimeType: 'audio/webm;codecs=opus',
             audioBitsPerSecond: 64000
