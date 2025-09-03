@@ -277,7 +277,7 @@
           }
           this.mediaRecorder = new MediaRecorder(
             stream,
-            Object.assign({}, chosenMime ? { mimeType: chosenMime } : {}, { audioBitsPerSecond: 64000 })
+            Object.assign({}, chosenMime ? { mimeType: chosenMime } : {}, { audioBitsPerSecond: 32000 })
           );
           addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || chosenMime || 'default'}`, 'info');
 
