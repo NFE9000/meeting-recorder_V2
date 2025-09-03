@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -74,6 +75,21 @@
     </div>
 
     <div class="form-group">
+      <label>Systemaudio aufnehmen</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <label style="display:flex;gap:6px;align-items:center;">
+          <input type="checkbox" id="captureSystemAudio" />
+          <span>Tab/Screen-Audio (Chrome/Edge)</span>
+        </label>
+        <button id="chooseTabAudio" style="padding:6px 10px;border-radius:8px;border:1px solid #ddd;background:#f6f6f6;">Quelle wählen</button>
+        <span id="systemAudioStatus" class="muted">Aus</span>
+      </div>
+      <div id="sysLevel" style="margin-top:8px;height:8px;background:#eee;border-radius:4px;overflow:hidden;">
+        <div id="sysLevelBar" style="height:100%;width:0%;background:linear-gradient(90deg,#34c759,#ff9f0a,#ff3b30);"></div>
+      </div>
+    </div>
+
+    <div class="form-group">
       <label for="projectSelect">Projekt auswählen</label>
       <select id="projectSelect">
         <option value="sonnenfarmen">☀️ Sonnenfarmen</option>
@@ -124,6 +140,10 @@
         this.micSelect = document.getElementById('micSelect');
         this.projectSelect = document.getElementById('projectSelect');
         this.micLevelBar = document.getElementById('micLevelBar');
+        this.captureSystemAudio = document.getElementById('captureSystemAudio');
+        this.chooseTabAudioBtn = document.getElementById('chooseTabAudio');
+        this.systemAudioStatus = document.getElementById('systemAudioStatus');
+        this.sysLevelBar = document.getElementById('sysLevelBar');
 
         this.mediaRecorder = null;
         this.isRecording = false;
@@ -162,6 +182,12 @@
         this.currentPreviewStream = null;
         this.micSelect.addEventListener('change', () => this.setupLevelMeter());
         this.setupLevelMeter();
+
+        // Systemaudio Setup
+        this.systemPreviewStream = null;
+        this.systemAudioEnabled = false;
+        this.captureSystemAudio.addEventListener('change', () => this.toggleSystemAudio());
+        this.chooseTabAudioBtn.addEventListener('click', (e) => { e.preventDefault(); this.pickSystemAudioSource(); });
       }
 
       async initDevices(){
@@ -247,6 +273,50 @@
         } catch(err){
           if(this.micLevelBar){ this.micLevelBar.style.width = '0%'; }
           addDebugLog(`Pegel-Meter Fehler: ${err.message}`, 'error');
+        }
+      }
+
+      async setupSystemLevelMeter(){
+        try{
+          if(!this.systemPreviewStream){ if(this.sysLevelBar){ this.sysLevelBar.style.width = '0%'; } return; }
+          if(!this.audioContext){ this.audioContext = new (window.AudioContext || window.webkitAudioContext)(); }
+          const analyser = this.audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          const source = this.audioContext.createMediaStreamSource(this.systemPreviewStream);
+          source.connect(analyser);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const update = () => {
+            analyser.getByteTimeDomainData(dataArray);
+            let sumSquares = 0; for(let i=0;i<dataArray.length;i++){ const v=(dataArray[i]-128)/128; sumSquares+=v*v; }
+            const rms = Math.sqrt(sumSquares / dataArray.length);
+            const pct = Math.min(100, Math.max(0, Math.round(rms * 100)));
+            if(this.sysLevelBar){ this.sysLevelBar.style.width = pct + '%'; }
+            requestAnimationFrame(update);
+          };
+          update();
+        } catch(err){ addDebugLog(`System-Pegel Fehler: ${err.message}`, 'error'); }
+      }
+
+      async toggleSystemAudio(){
+        this.systemAudioEnabled = !!this.captureSystemAudio.checked;
+        this.systemAudioStatus.textContent = this.systemAudioEnabled ? 'An' : 'Aus';
+        if(!this.systemAudioEnabled){
+          if(this.systemPreviewStream){ this.systemPreviewStream.getTracks().forEach(t=>t.stop()); this.systemPreviewStream=null; }
+          if(this.sysLevelBar){ this.sysLevelBar.style.width = '0%'; }
+        }
+      }
+
+      async pickSystemAudioSource(){
+        try{
+          if(!this.systemAudioEnabled){ addDebugLog('Systemaudio ist deaktiviert', 'info'); return; }
+          const stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+          // Wir brauchen nur Audio; Video-Track sofort stoppen
+          stream.getVideoTracks().forEach(t => t.stop());
+          this.systemPreviewStream = stream;
+          this.systemAudioStatus.textContent = 'Quelle gewählt';
+          this.setupSystemLevelMeter();
+        } catch(err){
+          addDebugLog(`Systemaudio Auswahl abgebrochen/fehlgeschlagen: ${err.message}`, 'error');
         }
       }
 
