@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -129,8 +130,9 @@
         this.startTime = 0;
         this.timerInterval = null;
 
-        // Chunk-Upload state
+        // Aufnahme-/Upload-Status
         this.chunkTexts = [];
+        this.recordedChunks = [];
         this.inFlight = new Set();
         this.maxParallel = 3;
 
@@ -279,43 +281,19 @@
           );
           addDebugLog(`MediaRecorder MIME: ${this.mediaRecorder.mimeType || chosenMime || 'default'}`, 'info');
 
-          // regelmässig fertige Chunks liefern
-          this.mediaRecorder.ondataavailable = async (e) => {
-            if(!e.data || e.data.size === 0) return;
-
-            const fd = new FormData();
-            const ext = (this.mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
-            fd.append('file', e.data, `chunk-${Date.now()}.${ext}`);
-            fd.append('model', 'gpt-4o-mini-transcribe');
-
-            const task = fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd })
-              .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t); }))
-              .then(json => {
-                if(typeof json?.text === 'string'){
-                  this.chunkTexts.push(json.text);
-                  addDebugLog(`Chunk ok (+${json.text.length} Zeichen)`, 'success');
-                  if(json.text.length === 0){
-                    addDebugLog('Warnung: Chunk-Transkript ist leer', 'error');
-                  }
-                } else {
-                  addDebugLog(`Chunk ohne Text`, 'error');
-                }
-              })
-              .catch(err => addDebugLog(`Chunk-Fehler: ${err.message}`, 'error'))
-              .finally(() => this.inFlight.delete(task));
-
-            this.inFlight.add(task);
-            if(this.inFlight.size >= this.maxParallel){
-              await Promise.race(this.inFlight); // Backpressure
+          // Chunks nur lokal puffern; finalen Blob nach Stop senden (sicherer für Container-Header)
+          this.mediaRecorder.ondataavailable = (e) => {
+            if(e.data && e.data.size > 0){
+              this.recordedChunks.push(e.data);
             }
           };
 
-          this.mediaRecorder.start(5000); // 5s Timeslice
+          this.mediaRecorder.start(); // ohne Timeslice, vollständige Datei
           this.isRecording = true;
           this.startTime = Date.now();
           this.startTimer();
           this.updateUI('recording');
-          addDebugLog('Aufnahme gestartet (Chunk-Modus 5s)', 'success');
+          addDebugLog('Aufnahme gestartet (Vollaufnahme, ein Upload am Ende)', 'success');
         } catch(err){
           addDebugLog(`Mikrofon-Fehler: ${err.message}`, 'error');
           this.updateStatus('error', '✗ Mikrofon-Zugriff verweigert');
@@ -337,13 +315,27 @@
           this.isRecording = false;
           this.stopTimer();
           this.updateUI('processing');
-          addDebugLog('Aufnahme gestoppt – warte auf Uploads...', 'info');
+          addDebugLog('Aufnahme gestoppt – lade komplette Datei hoch...', 'info');
 
-          while(this.inFlight.size > 0){
-            await Promise.race(this.inFlight);
+          // Kompletten Blob bilden und transkribieren
+          const ext = (this.mediaRecorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+          const fileType = this.mediaRecorder.mimeType || (ext === 'mp4' ? 'audio/mp4' : 'audio/webm');
+          const fullBlob = new Blob(this.recordedChunks, { type: fileType });
+          this.recordedChunks = [];
+          const fd = new FormData();
+          fd.append('file', fullBlob, `recording-${Date.now()}.${ext}`);
+          fd.append('model', 'gpt-4o-mini-transcribe');
+
+          const transRes = await fetch('/api/transcribe?endpoint=transcribe', { method: 'POST', body: fd });
+          if(!transRes.ok){
+            const errTxt = await transRes.text();
+            addDebugLog(`Transkription fehlgeschlagen: ${errTxt}`, 'error');
+            this.updateUI('ready');
+            this.updateStatus('error', '✗ Transkription fehlgeschlagen');
+            return;
           }
-
-          const fullTranscript = this.chunkTexts.join(' ');
+          const transJson = await transRes.json();
+          const fullTranscript = typeof transJson?.text === 'string' ? transJson.text : '';
           addDebugLog(`Transcript fertig (${fullTranscript.length} Zeichen)`, 'success');
 
           const summary = await this.generateSummary(fullTranscript);
